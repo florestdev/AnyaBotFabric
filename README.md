@@ -1,59 +1,91 @@
-# AnyaBot for Fabric
+# AnyabotFabric
 
-**Version:** 1.0
-**Minecraft:** 1.21.x
-**Platform:** Fabric
-
----
-
-## Overview
-
-AnyaBot is an interactive AI-powered companion mod for Minecraft Fabric. Players can spawn a special entity called **Anya** who can follow them, respond to commands, play mini-games, and even create a unique in-game 'baby' villager.
-
-This mod is designed to enhance immersion, particularly for Russian-speaking players, but supports basic English commands as well.
+**AnyabotFabric** is a Minecraft Fabric mod that adds AI-powered companions to your world.
+Now with **three unique companions**: **Anya**, **Kira**, and **Masha**. Each has her own personality, skin, and AI behavior.
 
 ---
 
 ## Features
 
-* **Summon Anya:** Spawn the Anya entity via `/summon` or by interacting with the spawn egg.
-* **Follow Player:** Anya can follow a specific player when enabled.
-* **Interactive Commands:** Players can trigger actions with natural language phrases like:
+### 1. Three AI Companions
 
-  * `Anya, come on!` – summon and follow the player
-  * `Anya, go play` or `Anya, давай поиграем` – Anya creates a 'baby' villager with heart particles
-* **AI Response System:** Anya reacts to actions such as getting hit or being spoken to.
-* **Sleep Behavior:** Anya can go to bed when the player is on a bed, sleep through the night, and wake up at daytime.
-* **Custom Name & Skin:** Anya has a unique texture and name (`AnyaChan`) with a fixed UUID.
-* **Micro Villager Spawn:** Performing specific interactions causes a tiny villager to appear, representing the player-Anya interaction.
+* **Anya** – The original companion.
+* **Kira** – New companion with her own skin and AI prompt.
+* **Masha** – Another new companion with unique AI and appearance.
+
+### 2. Follows Players
+
+* Companions can follow players around.
+* Controlled by a config option: `follow_player`.
+
+### 3. Chat Interaction
+
+* Speak to them in chat, and they will respond:
+
+  * `"anya, come on"` → Anya responds
+  * `"kira, come on"` → Kira responds
+  * `"masha, come on"` → Masha responds
+* AI responses powered by **SambaNova** or **Ollama**, configurable per companion.
+
+### 4. Build Structures
+
+* Companions can create Minecraft structures from NBT/SNBT.
+* Chat commands:
+
+  * `"create <idea>"` – Generates a structure based on the idea.
+  * `"build <url>"` – Builds a structure from a schematic URL.
+
+### 5. Heart Effects & Little Villagers
+
+* Interactive commands trigger heart particles.
+* A baby villager spawns as a "shared creation" with the player.
+* Works for all three companions.
+
+### 6. Sleep Mechanic
+
+* Companions will detect beds and attempt to sleep.
+* Warn players when they want to sleep.
+* Automatically wake up when the night ends.
+
+### 7. Configurable AI Prompts
+
+* Each companion has a unique AI prompt stored in `config/anya_config.json`:
+
+```json
+{
+  "model_anya": "DeepSeek-V3-0324",
+  "model_kira": "DeepSeek-V3-0324",
+  "model_masha": "DeepSeek-V3-0324",
+  "temperature": 0.7,
+  "follow_player": true
+}
+```
+
+### 8. Fully Server-Compatible
+
+* Works on Fabric servers.
+* Server tracks each companion individually.
+* No client-side mods required for basic AI interaction, but textures and rendering need a client install.
 
 ---
 
 ## Installation
 
-1. Install **Fabric Loader** for Minecraft 1.21.x.
-2. Install **FabricAPI** (mod) for Minecraft 1.21.x
-3. Place the `anyabotfabric.jar` into the `mods` folder.
-4. Start the Minecraft client or server.
+1. Place the mod JAR in your `mods` folder.
+2. You must download the FabricAPI mod from Modrinth, etc.
+3. Ensure Fabric Loader is installed (1.21.x supported).
+4. Optionally edit `config/anya_config.json` for AI and follow settings.
+5. Launch Minecraft (client or server).
 
 ---
 
-## Notes
+## Usage
 
-* Requires Fabric API.
-* Primarily intended for immersive single-player or small server gameplay.
-* Supports both Russian and English command inputs for core actions.
-* Players can manage which Anya entity is associated with them.
-* If you have some problems, please write your error (or server's crash log) in Github Issues.
+* Spawn a companion near you using chat: `"anya, come on"`, `"kira, come on"`, `"masha, come on"`.
+* Give commands for AI interaction, structure building, and more.
+* Watch them follow you, chat, and build in-game!
 
 ---
-
-## Example Commands / Phrases
-
-* `Anya, come on!` – summon Anya and start following.
-* `Anya, go play` – triggers the creation of a shared 'baby' villager.
-
----
-
-**Author:** FlorestDev
+Author: FlorestDev
+**AnyabotFabric** turns Minecraft into a world with three personalized, AI-powered companions, ready to chat, build, and interact with you.
 **Modrinth**: https://modrinth.com/mod/anyabotfabric
