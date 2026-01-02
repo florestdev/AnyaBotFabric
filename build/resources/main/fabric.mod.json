@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "id": "anyabotfabric",
+  "version": "1.0",
+  "name": "AnyaBotFabric",
+  "description": "This is modification for creating your virtual girlfriend (FABRIC)",
+  "authors": [],
+  "contact": {},
+  "license": "unlicense",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "ru.florestdev.anyabotfabric.Anyabotfabric"
+    ],
+    "client": [
+      "ru.florestdev.anyabotfabric.client.AnyaEntityRenderer"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.18.2",
+    "fabric-api": "*",
+    "minecraft": "1.21.8"
+  }
+}
