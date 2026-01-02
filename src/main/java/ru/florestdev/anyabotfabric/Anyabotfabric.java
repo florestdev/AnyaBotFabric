@@ -3,13 +3,6 @@ package ru.florestdev.anyabotfabric;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
-import net.fabricmc.fabric.api.itemgroup.v1.ItemGroupEvents;
-import net.minecraft.component.Component;
-import net.minecraft.entity.SpawnReason;
-import net.minecraft.entity.passive.VillagerEntity;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.ItemGroup;
-import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents;
 import net.fabricmc.fabric.api.event.player.AttackEntityCallback;
@@ -17,12 +10,13 @@ import net.fabricmc.fabric.api.event.player.UseEntityCallback;
 import net.fabricmc.fabric.api.message.v1.ServerMessageEvents;
 import net.fabricmc.fabric.api.object.builder.v1.entity.FabricDefaultAttributeRegistry;
 import net.fabricmc.fabric.api.object.builder.v1.entity.FabricEntityTypeBuilder;
+import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityDimensions;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.SpawnGroup;
-import net.minecraft.item.Item;
+import net.minecraft.entity.SpawnReason;
+import net.minecraft.entity.passive.VillagerEntity;
 import net.minecraft.item.ItemStack;
-import net.minecraft.item.SpawnEggItem;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.nbt.NbtIo;
 import net.minecraft.nbt.StringNbtReader;
@@ -37,7 +31,6 @@ import net.minecraft.util.ActionResult;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.math.BlockPos;
 
-import java.awt.*;
 import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
@@ -46,10 +39,6 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.*;
-
-import net.minecraft.item.ItemGroups;
-
-import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 public class Anyabotfabric implements ModInitializer {
@@ -57,43 +46,40 @@ public class Anyabotfabric implements ModInitializer {
     public static final String MODID = "anyabotfabric";
     private static final File CONFIG_FILE = new File("config/anya_config.json");
 
-    // === Параметры Конфига ===
     private static JsonObject configData = new JsonObject();
     private final HttpClient http = HttpClient.newHttpClient();
     private final Gson gson = new Gson();
 
-    // === Память Ани (Список последних сообщений) ===
     private final List<JsonObject> chatHistory = new ArrayList<>();
-    private static final int MAX_MEMORY = 500; // Помнит 5 последних диалогов (вопрос-ответ)
+    private static final int MAX_MEMORY = 500;
 
     public static Map<UUID, AnyaEntity> playerToAnya = new HashMap<>();
+    public static Map<UUID, KiraEntity> playerToKira = new HashMap<>();
+    public static Map<UUID, MashaEntity> playerToMasha = new HashMap<>();
 
     public static EntityType<AnyaEntity> ANYA;
     public static final RegistryKey<EntityType<?>> ANYA_KEY =
             RegistryKey.of(Registries.ENTITY_TYPE.getKey(), Identifier.of(MODID, "anya"));
 
+    public static EntityType<KiraEntity> KIRA;
+    public static final RegistryKey<EntityType<?>> KIRA_KEY =
+            RegistryKey.of(Registries.ENTITY_TYPE.getKey(), Identifier.of(MODID, "kira"));
+
+    public static EntityType<MashaEntity> MASHA;
+    public static final RegistryKey<EntityType<?>> MASHA_KEY =
+            RegistryKey.of(Registries.ENTITY_TYPE.getKey(), Identifier.of(MODID, "masha"));
+
     public void placeStructure(java.io.File file, net.minecraft.util.math.BlockPos pos, net.minecraft.server.world.ServerWorld world) {
         try (java.io.FileInputStream fis = new java.io.FileInputStream(file)) {
-            // Читаем NBT файл
             net.minecraft.nbt.NbtCompound nbt = net.minecraft.nbt.NbtIo.readCompressed(fis, net.minecraft.nbt.NbtSizeTracker.ofUnlimitedBytes());
-
-            // Создаем шаблон структуры
             net.minecraft.structure.StructureTemplate template = new net.minecraft.structure.StructureTemplate();
-
-            // Магия реестров (для 1.20+)
             var registryLookup = world.getRegistryManager().getOrThrow(net.minecraft.registry.RegistryKeys.BLOCK);
             template.readNbt(registryLookup, nbt);
-
-            // Настройки размещения
-            net.minecraft.structure.StructurePlacementData settings = new net.minecraft.structure.StructurePlacementData()
-                    .setIgnoreEntities(false);
-
-            // Важно: выполняем на главном потоке сервера, чтобы не крашнулось
+            net.minecraft.structure.StructurePlacementData settings = new net.minecraft.structure.StructurePlacementData().setIgnoreEntities(false);
             world.getServer().execute(() -> {
                 template.place(world, pos, pos, settings, world.getRandom(), 2);
-                System.out.println("Аня: Построила успешно!");
+                System.out.println("Построила успешно!");
             });
-
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -102,7 +88,6 @@ public class Anyabotfabric implements ModInitializer {
     private String extractSchematicUrl(String text) {
         String[] words = text.split("\\s+");
         for (String word : words) {
-            // Проверяем, что это ссылка и она ведет на файл постройки
             if (word.startsWith("http") && (word.contains(".nbt") || word.contains(".schem"))) {
                 return word;
             }
@@ -114,8 +99,8 @@ public class Anyabotfabric implements ModInitializer {
         VillagerEntity villager = EntityType.VILLAGER.create(world, SpawnReason.TRIGGERED);
         if (villager != null) {
             villager.refreshPositionAndAngles(pos, 0, 0);
-            villager.setCustomName(Text.literal("Anya's & %s Baby".formatted(playerName))); // можно добавить эмодзи
-            villager.setBaby(true); // делает его детёнышем
+            villager.setCustomName(Text.literal("%s's Baby".formatted(playerName)));
+            villager.setBaby(true);
             world.spawnEntity(villager);
         }
     }
@@ -130,204 +115,155 @@ public class Anyabotfabric implements ModInitializer {
                         .build(ANYA_KEY));
         FabricDefaultAttributeRegistry.register(ANYA, AnyaEntity.createAttributes());
 
-        // Удар по Ане
+        KIRA = Registry.register(Registries.ENTITY_TYPE, Identifier.of(MODID, "kira"),
+                FabricEntityTypeBuilder.create(SpawnGroup.CREATURE, KiraEntity::new)
+                        .dimensions(EntityDimensions.fixed(0.6f, 1.8f))
+                        .build(KIRA_KEY));
+        FabricDefaultAttributeRegistry.register(KIRA, KiraEntity.createAttributes());
+
+        MASHA = Registry.register(Registries.ENTITY_TYPE, Identifier.of(MODID, "masha"),
+                FabricEntityTypeBuilder.create(SpawnGroup.CREATURE, MashaEntity::new)
+                        .dimensions(EntityDimensions.fixed(0.6f, 1.8f))
+                        .build(MASHA_KEY));
+        FabricDefaultAttributeRegistry.register(MASHA, MashaEntity.createAttributes());
+
         AttackEntityCallback.EVENT.register((player, world, hand, entity, hit) -> {
-            if (!world.isClient && entity instanceof AnyaEntity && player instanceof ServerPlayerEntity sp) {
-                askAI("Игрок ударил меня!", "Ай! За что? 😢", sp);
+            if (!world.isClient && player instanceof ServerPlayerEntity sp) {
+                if (entity instanceof AnyaEntity) {
+                    askAI(entity, "%s ударил тебя!".formatted(player.getName().getString()), "Ай! За что? 😢", sp);
+                    playerToAnya.remove(player.getUuid());
+                } else if (entity instanceof KiraEntity) {
+                    askAI(entity, "%s ударил тебя!".formatted(player.getName().getString()), "Эй! Это было больно!", sp);
+                    playerToKira.remove(player.getUuid());
+                } else if (entity instanceof MashaEntity) {
+                    askAI(entity, "%s ударил тебя!".formatted(player.getName().getString()), "Прекрати сейчас же! 😡", sp);
+                    playerToMasha.remove(player.getUuid());
+                }
             }
-            Anyabotfabric.playerToAnya.remove(player.getUuid());
-            player.sendMessage(Text.literal("Аня больше не будет за тобой следовать."), false);
             return ActionResult.PASS;
         });
 
         UseEntityCallback.EVENT.register((player, world, hand, entity, hitResult) -> {
-            if (!world.isClient && entity instanceof AnyaEntity anya && player instanceof ServerPlayerEntity sp) {
-                playerToAnya.put(sp.getUuid(), anya);
-                sp.sendMessage(Text.literal("Теперь Anya будет вашей!"), true);
-                return ActionResult.SUCCESS;
+            if (!world.isClient && player instanceof ServerPlayerEntity sp) {
+                if (entity instanceof AnyaEntity anya) {
+                    playerToAnya.put(sp.getUuid(), anya);
+                    sp.sendMessage(Text.literal("Теперь Anya будет вашей!"), true);
+                    return ActionResult.SUCCESS;
+                } else if (entity instanceof KiraEntity kira) {
+                    playerToKira.put(sp.getUuid(), kira);
+                    sp.sendMessage(Text.literal("Теперь Kira будет вашей!"), true);
+                    return ActionResult.SUCCESS;
+                } else if (entity instanceof MashaEntity masha) {
+                    playerToMasha.put(sp.getUuid(), masha);
+                    sp.sendMessage(Text.literal("Теперь Masha будет вашей!"), true);
+                    return ActionResult.SUCCESS;
+                }
             }
             return ActionResult.PASS;
         });
 
-
-        // Чат рядом с Аней
         ServerMessageEvents.CHAT_MESSAGE.register((message, sender, params) -> {
             String playerText = message.getContent().getString();
-            if (playerText.toLowerCase().contains("anya, приди") || playerText.toLowerCase().contains("anya, come on")) {spawnIfFirst(sender);}
+            String lowText = playerText.toLowerCase();
 
-            // 1. Ищем Аню рядом
-            AnyaEntity anya = sender.getWorld().getEntitiesByClass(AnyaEntity.class,
-                    sender.getBoundingBox().expand(10.0), e -> true).stream().findFirst().orElse(null);
+            if (lowText.contains("аня, приди") || lowText.contains("anya, come on")) spawnIfFirst(sender, ANYA);
+            if (lowText.contains("кира, приди") || lowText.contains("kira, come on")) spawnIfFirst(sender, KIRA);
+            if (lowText.contains("маша, приди") || lowText.contains("masha, come on")) spawnIfFirst(sender, MASHA);
 
-            if (anya != null) {
-                if (playerText.toLowerCase().contains("anya, go play") || playerText.toLowerCase().contains("аня, давай поиграем")) {
-                    if (!playerToAnya.containsKey(sender.getUuid())) {
-                        sender.sendMessage(Text.of("Бро, это не твоя Аня! ты не можешь иметь ребенка с ней."));
+            Entity bot = sender.getWorld().getEntitiesByClass(Entity.class,
+                    sender.getBoundingBox().expand(10.0),
+                    e -> e instanceof AnyaEntity || e instanceof KiraEntity || e instanceof MashaEntity).stream().findFirst().orElse(null);
+
+            if (bot != null) {
+                if (lowText.contains("давай поиграем") || lowText.contains("go play")) {
+                    boolean isMine = (bot instanceof AnyaEntity && playerToAnya.containsKey(sender.getUuid())) ||
+                            (bot instanceof KiraEntity && playerToKira.containsKey(sender.getUuid())) ||
+                            (bot instanceof MashaEntity && playerToMasha.containsKey(sender.getUuid()));
+
+                    if (!isMine) {
+                        sender.sendMessage(Text.of("Это не твоя подруга!"));
                         return;
                     }
-                    askAI("Ты с %s занялась ... и появился ребенок у вас совместный.".formatted(sender.getName().getString()), "Ой… кто-то новый появился!", sender);
-                    sender.getWorld().spawnParticles(
-                            ParticleTypes.HEART,  // тип частицы — сердечко
-                            sender.getX(),        // X координата
-                            sender.getY() + 1.2,  // Y (чуть выше сущности, чтобы видно было)
-                            sender.getZ(),        // Z
-                            10,                   // количество частиц
-                            0.3, 0.3, 0.3,        // разброс по XYZ
-                            0.0                   // скорость
-                    );
+
+                    askAI(bot, "Ты с %s завела ребенка.".formatted(sender.getName().getString()), "Ой!", sender);
+                    sender.getWorld().spawnParticles(ParticleTypes.HEART, sender.getX(), sender.getY() + 1.2, sender.getZ(), 10, 0.3, 0.3, 0.3, 0.0);
                     spawnLittleVillager(sender.getWorld(), sender.getBlockPos(), sender.getName().getString());
                 }
-            }
 
-            if (anya != null) {
-                if (playerText.toLowerCase().startsWith("создай ")
-                        || playerText.toLowerCase().startsWith("create ")) {
-
+                if (lowText.startsWith("создай ") || lowText.startsWith("create ")) {
                     String idea = playerText.substring(playerText.indexOf(" ") + 1);
-
-                    askAIStructure(idea, sender);
+                    askAIStructure(bot, idea, sender);
                     return;
                 }
-            }
 
-            if (anya != null) {
-                // 2. Проверяем, есть ли в сообщении ссылка и команда на постройку
                 String foundUrl = extractSchematicUrl(playerText);
-
-                if (foundUrl != null && (playerText.toLowerCase().contains("построй") || playerText.toLowerCase().contains("build"))) {
-
-                    // Запускаем стройку!
+                if (foundUrl != null && (lowText.contains("построй") || lowText.contains("build"))) {
                     AnyaSchematicHelper.downloadAndProcess(foundUrl, (file) -> {
-                        // Строим чуть впереди игрока
-                        System.out.println("Так.. Ну, началось!");
                         BlockPos buildPos = sender.getBlockPos().offset(sender.getHorizontalFacing(), 5);
-
-                        // Вызываем метод вставки из твоего главного класса
-                        // (Если метод в Anyabotfabric, вызывай через Anyabotfabric.INSTANCE или как у тебя настроено)
-                        System.out.println("Окей.. Делаем.");
                         this.placeStructure(file, buildPos, (ServerWorld) sender.getWorld());
                     });
-
-                    // Отправляем Ане запрос, чтобы она прокомментировала стройку
-                    askAI(sender.getName().getString() + " просит тебя построить это по ссылке: " + foundUrl, "...", sender);
+                    askAI(bot, sender.getName().getString() + " просит построить это по ссылке: " + foundUrl, "...", sender);
                 } else {
-                    // Если ссылки нет — просто обычный разговор
-                    askAI(sender.getName().getString() + " говорит: " + playerText, "...", sender);
+                    askAI(bot, sender.getName().getString() + " говорит: " + playerText, "...", sender);
                 }
             }
         });
     }
 
-    private void askAI(String prompt, String fallback, ServerPlayerEntity player) {
-        processAI(prompt, fallback, false).thenAccept(reply ->
-                player.getServer().execute(() -> player.sendMessage(Text.literal("§d<Anya>§f " + reply), false))
+    private void askAI(Entity bot, String prompt, String fallback, ServerPlayerEntity player) {
+        processAI(bot, prompt, fallback, false).thenAccept(reply ->
+                player.getServer().execute(() -> player.sendMessage(Text.literal("§d<" + bot.getName().getString() + ">§f " + reply), false))
         );
     }
 
-    public NbtCompound snbt_to_nbt(String snbt) {
-        try {
-            return StringNbtReader.readCompound(snbt);
-        } catch (CommandSyntaxException e) {
-            return null;
-        }
-    }
-
-    private void askAIStructure(String idea, ServerPlayerEntity player) {
-        processAI(
-                "Создай структуру: " + idea,
-                "",
-                true
-        ).thenAccept(snbt -> {
-
+    private void askAIStructure(Entity bot, String idea, ServerPlayerEntity player) {
+        processAI(bot, "Создай структуру: " + idea, "", true).thenAccept(snbt -> {
             player.getServer().execute(() -> {
                 try {
-                    // 1. SNBT → NBT
                     NbtCompound nbt = StringNbtReader.readCompound(snbt);
-                    System.out.println("SNBT is ->" + " " + snbt);
-
-                    // 2. Сохраняем во временный файл
-                    File file = new File("anya_generated.nbt");
+                    File file = new File("generated_structure.nbt");
                     NbtIo.writeCompressed(nbt, file.toPath());
-
-                    // 3. Ставим рядом с игроком
-                    BlockPos pos = player.getBlockPos()
-                            .offset(player.getHorizontalFacing(), 5);
-
+                    BlockPos pos = player.getBlockPos().offset(player.getHorizontalFacing(), 5);
                     placeStructure(file, pos, (ServerWorld) player.getWorld());
-
-                    player.sendMessage(
-                            Text.literal("§d<Anya>§f Я построила это для тебя 💕"),
-                            false
-                    );
-
+                    player.sendMessage(Text.literal("§d<" + bot.getName().getString() + ">§f Я построила это для тебя 💕"), false);
                 } catch (Exception e) {
-                    e.printStackTrace();
-                    player.sendMessage(
-                            Text.literal("§c<Anya>§f Я не смогла это построить 😢"),
-                            false
-                    );
+                    player.sendMessage(Text.literal("§c<" + bot.getName().getString() + ">§f Не смогла построить... 😢"), false);
                 }
             });
         });
     }
 
-    private CompletableFuture<String> processAI(String userText, String fallback, boolean isNBT) {
+    private CompletableFuture<String> processAI(Entity bot, String userText, String fallback, boolean isNBT) {
         boolean isOllama = configData.get("is_ollama").getAsBoolean();
         String model = configData.get("model").getAsString();
+        String botName = bot.getName().getString().toLowerCase();
 
         JsonObject body = new JsonObject();
         body.addProperty("model", model);
         body.addProperty("temperature", configData.get("temperature").getAsDouble());
-        if (!isOllama) body.addProperty("max_tokens", configData.get("max_tokens").getAsInt());
         if (isOllama) body.addProperty("stream", false);
 
-        // Формируем пакет сообщений
         JsonArray messages = new JsonArray();
-        if (!isNBT) {
-            messages.add(createMsg("system", configData.get("system_prompt").getAsString()));
+        String sysPrompt;
+
+        if (isNBT) {
+            sysPrompt = "Верни ТОЛЬКО SNBT Minecraft 1.21.";
         } else {
-            String prompt =
-                    "Ты генерируешь СТРОГО валидный SNBT для StructureTemplate Minecraft 1.21.x.\n" +
-                            "\n" +
-                            "ОБЯЗАТЕЛЬНЫЕ ТРЕБОВАНИЯ:\n" +
-                            "1. Ответ должен содержать ТОЛЬКО один SNBT-объект.\n" +
-                            "2. Любой символ вне SNBT считается ошибкой.\n" +
-                            "3. Используй ТОЛЬКО ASCII (запрещена кириллица).\n" +
-                            "4. Используй ТОЛЬКО vanilla блоки Minecraft.\n" +
-                            "5. Запрещены комментарии, пояснения, форматирование, markdown.\n" +
-                            "\n" +
-                            "СТРУКТУРА SNBT (ОБЯЗАТЕЛЬНО):\n" +
-                            "- size: [X, Y, Z]\n" +
-                            "- palette: список блоков вида {Name:\"minecraft:block\"}\n" +
-                            "- blocks: список блоков вида {pos:[x,y,z], state:index}\n" +
-                            "\n" +
-                            "ПРАВИЛА:\n" +
-                            "- size должна соответствовать координатам blocks.\n" +
-                            "- state ссылается на индекс блока в palette.\n" +
-                            "- Используй air для пустоты.\n" +
-                            "- Минимальный размер структуры: 3x3x3.\n" +
-                            "- Структура должна быть ЗАВЕРШЁННОЙ и корректной.\n" +
-                            "\n" +
-                            "НЕ ДЕЛАЙ:\n" +
-                            "- JSON\n" +
-                            "- Абстрактные поля\n" +
-                            "- Описания комнат\n" +
-                            "- Текстовые комментарии\n" +
-                            "- Любые ключи кроме size, palette, blocks\n" +
-                            "\n" +
-                            "Верни ТОЛЬКО SNBT.";
-            messages.add(createMsg("system", prompt));
+            // Поддержка раздельных промптов из конфига
+            JsonObject prompts = configData.getAsJsonObject("system_prompt");
+            if (prompts.has(botName)) {
+                sysPrompt = prompts.get(botName).getAsString();
+            } else {
+                sysPrompt = "Ты — персонаж Minecraft по имени " + bot.getName().getString();
+            }
         }
 
-        // Добавляем ПАМЯТЬ
+        messages.add(createMsg("system", sysPrompt));
         for (JsonObject oldMsg : chatHistory) messages.add(oldMsg);
-
-        // Текущее сообщение
         messages.add(createMsg("user", userText));
         body.add("messages", messages);
 
         String url = isOllama ? configData.get("ollama_url").getAsString() : configData.get("cloud_url").getAsString();
-
         HttpRequest.Builder builder = HttpRequest.newBuilder()
                 .uri(URI.create(url))
                 .header("Content-Type", "application/json")
@@ -339,31 +275,19 @@ public class Anyabotfabric implements ModInitializer {
                 .thenApply(resp -> {
                     try {
                         JsonObject resObj = gson.fromJson(resp.body(), JsonObject.class);
-                        String content;
-                        if (isOllama) {
-                            content = resObj.getAsJsonObject("message").get("content").getAsString();
-                        } else {
-                            content = resObj.getAsJsonArray("choices").get(0).getAsJsonObject().getAsJsonObject("message").get("content").getAsString();
-                        }
-
-                        // Сохраняем в память
+                        String content = isOllama ? resObj.getAsJsonObject("message").get("content").getAsString() :
+                                resObj.getAsJsonArray("choices").get(0).getAsJsonObject().getAsJsonObject("message").get("content").getAsString();
                         updateMemory(userText, content);
                         return content.trim();
-                    } catch (Exception e) {
-                        return fallback;
-                    }
+                    } catch (Exception e) { return fallback; }
                 }).exceptionally(e -> fallback);
     }
 
     private void updateMemory(String user, String assistant) {
         chatHistory.add(createMsg("user", user));
         chatHistory.add(createMsg("assistant", assistant));
-        if (chatHistory.size() > MAX_MEMORY) {
-            chatHistory.remove(0);
-            chatHistory.remove(0);
-        }
+        if (chatHistory.size() > MAX_MEMORY) { chatHistory.remove(0); chatHistory.remove(0); }
     }
-
 
     private JsonObject createMsg(String role, String content) {
         JsonObject m = new JsonObject();
@@ -380,7 +304,14 @@ public class Anyabotfabric implements ModInitializer {
                 def.addProperty("is_ollama", true);
                 def.addProperty("model", "DeepSeek-V3-0324");
                 def.addProperty("api_key", "sk-...");
-                def.addProperty("system_prompt", "Ты — милая Аня, подруга игрока в Minecraft (модификация: AnyaBot-Fabric)");
+
+                // Новая структура system_prompt
+                JsonObject sysPrompts = new JsonObject();
+                sysPrompts.addProperty("anya", "Ты — милая Аня, подруга игрока в Minecraft.");
+                sysPrompts.addProperty("kira", "Ты — энергичная Кира, любишь приключения в Minecraft.");
+                sysPrompts.addProperty("masha", "Ты — спокойная Маша, эксперт по строительству в Minecraft.");
+                def.add("system_prompt", sysPrompts);
+
                 def.addProperty("temperature", 0.7);
                 def.addProperty("follow_player", true);
                 def.addProperty("max_tokens", 200);
@@ -388,29 +319,21 @@ public class Anyabotfabric implements ModInitializer {
                 def.addProperty("cloud_url", "https://api.sambanova.ai/v1/chat/completions");
                 try (FileWriter writer = new FileWriter(CONFIG_FILE)) { gson.toJson(def, writer); }
             }
-            try (FileReader reader = new FileReader(CONFIG_FILE)) {
-                configData = gson.fromJson(reader, JsonObject.class);
-            }
+            try (FileReader reader = new FileReader(CONFIG_FILE)) { configData = gson.fromJson(reader, JsonObject.class); }
         } catch (Exception e) { e.printStackTrace(); }
     }
 
-    // Добавь это в Anyabotfabric.java
     public static boolean isFollowPlayerEnabled() {
-        try {
-            if (configData != null && configData.has("follow_player")) {
-                return configData.get("follow_player").getAsBoolean();
-            }
-        } catch (Exception e) {
-            System.err.println("[AnyaBot] Ошибка при чтении follow_player: " + e.getMessage());
-        }
-        return true; // Значение по умолчанию, если что-то пошло не так
+        return configData != null && configData.has("follow_player") && configData.get("follow_player").getAsBoolean();
     }
 
-    private void spawnIfFirst(ServerPlayerEntity player) {
-        if (player.getWorld().getPlayers().size() == 1) {;
-            AnyaEntity anya = new AnyaEntity(ANYA, player.getWorld());
-            anya.refreshPositionAndAngles(player.getBlockPos().add(2, 0, 2), 0, 0);
-            player.getWorld().spawnEntity(anya);
+    private void spawnIfFirst(ServerPlayerEntity player, EntityType<?> type) {
+        if (player.getWorld().getPlayers().size() == 1) {
+            Entity e = type.create(player.getWorld(), SpawnReason.TRIGGERED);
+            if (e != null) {
+                e.refreshPositionAndAngles(player.getBlockPos().add(2, 0, 2), 0, 0);
+                player.getWorld().spawnEntity(e);
+            }
         }
     }
 }
